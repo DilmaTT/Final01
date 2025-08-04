@@ -24,6 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 
 interface TrainingProps {
@@ -38,7 +39,10 @@ interface SessionStat {
   correctAnswers: number;
 }
 
-export const Training = ({ isMobileMode = false }: TrainingProps) => {
+export const Training = ({ isMobileMode: propIsMobileMode = false }: TrainingProps) => {
+  const isMobileHook = useIsMobile();
+  const isMobileMode = propIsMobileMode || isMobileHook;
+
   const [trainings, setTrainings] = useState(() => {
     const saved = localStorage.getItem('training-sessions');
     try {
@@ -68,6 +72,13 @@ export const Training = ({ isMobileMode = false }: TrainingProps) => {
   const [modalStats, setModalStats] = useState<SessionStat[]>([]);
   const [deleteCandidateId, setDeleteCandidateId] = useState<string | null>(null);
   const statsModalTraining = trainings.find(t => t.id === statsModalTrainingId);
+
+  // Auto-select the first training in desktop mode if none is selected
+  useEffect(() => {
+    if (!isMobileMode && trainings.length > 0 && !selectedTraining) {
+      setSelectedTraining(trainings[0].id);
+    }
+  }, [isMobileMode, trainings, selectedTraining]);
 
   // Save trainings to localStorage when they change
   useEffect(() => {

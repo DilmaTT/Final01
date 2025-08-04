@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PokerMatrix } from "./PokerMatrix";
@@ -15,6 +15,60 @@ interface TrainingSessionProps {
   training: any;
   onStop: () => void;
 }
+
+const SUITS = ['spades', 'hearts', 'diamonds', 'clubs'];
+
+const getRandomSuit = () => SUITS[Math.floor(Math.random() * SUITS.length)];
+const getTwoDifferentRandomSuits = () => {
+  let suit1 = getRandomSuit();
+  let suit2 = getRandomSuit();
+  while (suit1 === suit2) {
+    suit2 = getRandomSuit();
+  }
+  return [suit1, suit2];
+};
+
+const generateHandDisplayInfo = (hand: string) => {
+  let cardsInfo: Array<{ rank: string, suit: string }>;
+
+  if (hand.length === 2 && hand[0] === hand[1]) { // Pocket pairs like AA, KK, etc.
+    const [suit1, suit2] = getTwoDifferentRandomSuits();
+    cardsInfo = [
+      { rank: hand[0], suit: suit1 },
+      { rank: hand[1], suit: suit2 }
+    ];
+  } else if (hand.length === 3) { // Suited or offsuit like AKs, AKo
+    const suited = hand[2] === 's';
+    if (suited) {
+      const commonSuit = getRandomSuit();
+      cardsInfo = [
+        { rank: hand[0], suit: commonSuit },
+        { rank: hand[1], suit: commonSuit }
+      ];
+    } else { // Offsuit
+      const [suit1, suit2] = getTwoDifferentRandomSuits();
+      cardsInfo = [
+        { rank: hand[0], suit: suit1 },
+        { rank: hand[1], suit: suit2 }
+      ];
+    }
+  } else if (hand.length === 2) { // Non-paired offsuit like AK, QJ (implicitly offsuit if no 's' or 'o')
+    const [suit1, suit2] = getTwoDifferentRandomSuits();
+    cardsInfo = [
+      { rank: hand[0], suit: suit1 },
+      { rank: hand[1], suit: suit2 }
+    ];
+  }
+  else {
+    // Fallback for invalid hand format, though it should not happen with proper data
+    cardsInfo = [
+      { rank: 'A', suit: 'spades' },
+      { rank: 'A', suit: 'hearts' }
+    ];
+  }
+  return { hand, cards: cardsInfo };
+};
+
 
 const getActionColor = (actionId: string, allButtons: ActionButton[]): string => {
     if (actionId === 'fold') return '#6b7280';
@@ -55,6 +109,7 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
   const isMobile = useIsMobile();
   
   const [currentHand, setCurrentHand] = useState<string>('');
+  const [currentDisplayHandInfo, setCurrentDisplayHandInfo] = useState<{ hand: string, cards: Array<{ rank: string, suit: string }> } | null>(null);
   const [handsForTraining, setHandsForTraining] = useState<string[]>([]);
   const [currentRangeIndex, setCurrentRangeIndex] = useState(0);
   const [classicModeCurrentRange, setClassicModeCurrentRange] = useState<any>(null);
@@ -71,6 +126,8 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
   const [activeAction, setActiveAction] = useState<string>(() => actionButtons[0]?.id || '');
   const [showResultsDialog, setShowResultsDialog] = useState(false);
   const [trainingResults, setTrainingResults] = useState<any>(null);
+
+  const autoProceedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const trainingRanges = useMemo(() => {
     const ranges = [];
@@ -119,7 +176,9 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
 
   const generateNewClassicHand = () => {
     const randomIndex = Math.floor(Math.random() * allPossibleHands.length);
-    setCurrentHand(allPossibleHands[randomIndex]);
+    const newHand = allPossibleHands[randomIndex];
+    setCurrentHand(newHand);
+    setCurrentDisplayHandInfo(generateHandDisplayInfo(newHand));
   };
 
   useEffect(() => {
@@ -139,7 +198,9 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
         setHandsForTraining(handPool);
         if (handPool.length > 0) {
           const randomIndex = Math.floor(Math.random() * handPool.length);
-          setCurrentHand(handPool[randomIndex]);
+          const newHand = handPool[randomIndex];
+          setCurrentHand(newHand);
+          setCurrentDisplayHandInfo(generateHandDisplayInfo(newHand));
         } else {
             toast({
                 title: "Не удалось определить границу ренжа",
@@ -147,9 +208,17 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
                 variant: "warning",
             });
             setCurrentHand('');
+            setCurrentDisplayHandInfo(null);
         }
       }
     }
+
+    // Cleanup timeout on component unmount or training type change
+    return () => {
+      if (autoProceedTimeoutRef.current) {
+        clearTimeout(autoProceedTimeoutRef.current);
+      }
+    };
   }, [training.type, training.subtype, training.borderExpansionLevel, trainingRanges]);
 
   const getCorrectAction = (hand: string) => {
@@ -193,10 +262,15 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
     });
 
     if (isCorrect) {
-      setTimeout(() => {
+      // Auto-proceed after 1.5 seconds if correct
+      autoProceedTimeoutRef.current = setTimeout(() => {
         proceedToNext();
-      }, 1500);
+      }, 1500); // Changed from 1000 to 1500
+      // Do NOT set canProceed(true) for correct answers
     } else {
+      // Allow user to click "Play" to proceed only if incorrect
+      setCanProceed(true); 
+      // Always show correct range if incorrect
       setShowCorrectRange(true);
     }
   };
@@ -256,6 +330,12 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
   };
 
   const proceedToNext = () => {
+    // Clear any pending auto-proceed timeout
+    if (autoProceedTimeoutRef.current) {
+      clearTimeout(autoProceedTimeoutRef.current);
+      autoProceedTimeoutRef.current = null;
+    }
+
     if (training.type === 'classic') {
       const randomRangeIndex = Math.floor(Math.random() * trainingRanges.length);
       const nextRange = trainingRanges[randomRangeIndex];
@@ -272,7 +352,9 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
         setHandsForTraining(handPool);
         if (handPool.length > 0) {
           const nextHandIndex = Math.floor(Math.random() * handPool.length);
-          setCurrentHand(handPool[nextHandIndex]);
+          const nextHand = handPool[nextHandIndex];
+          setCurrentHand(nextHand);
+          setCurrentDisplayHandInfo(generateHandDisplayInfo(nextHand));
         } else {
           toast({
             title: "Тренировка завершена",
@@ -287,9 +369,6 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
       if (currentRangeIndex < trainingRanges.length - 1) {
         setCurrentRangeIndex(prev => prev + 1);
         setUserMatrix({});
-        setIsChecked(false);
-        setCanProceed(false);
-        setActiveAction(actionButtons[0]?.id || '');
       } else {
         finishTraining();
         return;
@@ -298,9 +377,18 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
     
     setFeedback(null);
     setShowCorrectRange(false);
+    setCanProceed(false); // Reset canProceed for the next question
+    setIsChecked(false); // Reset for border repeat
+    setActiveAction(actionButtons[0]?.id || ''); // Reset active action for border repeat
   };
 
   const finishTraining = () => {
+    // Clear any pending auto-proceed timeout before finishing
+    if (autoProceedTimeoutRef.current) {
+      clearTimeout(autoProceedTimeoutRef.current);
+      autoProceedTimeoutRef.current = null;
+    }
+
     const finishTime = Date.now();
     const duration = finishTime - sessionStats.startTime;
     const correctAnswers = sessionStats.hands.filter(h => h.correct).length;
@@ -435,11 +523,11 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
                     
                     <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
                       <div className="bg-black rounded-full p-4 shadow-xl border-4 border-gray-800">
-                        <PokerCard hand={currentHand} className="scale-90 sm:scale-100" />
+                        <PokerCard hand={currentHand} fixedCards={currentDisplayHandInfo?.cards} className="scale-90 sm:scale-100" />
                       </div>
                     </div>
                     
-                    {feedback === 'incorrect' && (
+                    {canProceed && ( // Show Play button ONLY when canProceed is true (i.e., incorrect answer)
                       <div className="absolute top-1/2 right-8 sm:right-12 transform -translate-y-1/2">
                         <Button
                           onClick={proceedToNext}
@@ -468,7 +556,7 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
                     variant="secondary"
                     size="sm"
                     onClick={() => handleClassicAnswer('fold')}
-                    disabled={!!feedback}
+                    disabled={canProceed} // Disable after answer
                     className={cn(
                       "bg-gray-500 text-white hover:bg-gray-600 text-xs sm:text-sm px-3 sm:px-4",
                       feedback === 'incorrect' && getCorrectAction(currentHand) === 'fold' && "ring-2 ring-green-500"
@@ -481,7 +569,7 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
                       key={button.id}
                       size="sm"
                       onClick={() => handleClassicAnswer(button.id)}
-                      disabled={!!feedback}
+                      disabled={canProceed} // Disable after answer
                       style={getActionButtonStyle(button, actionButtons)}
                       className={cn(
                         "text-white hover:opacity-80 text-xs sm:text-sm px-3 sm:px-4",
@@ -492,14 +580,6 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
                     </Button>
                   ))}
                 </div>
-
-                {feedback === 'incorrect' && (
-                  <div className="text-center mt-6">
-                    <Button onClick={finishTraining} variant="destructive" size="lg">
-                      Завершить
-                    </Button>
-                  </div>
-                )}
 
                 {showCorrectRange && activeRange && (
                   <div className="space-y-4">
@@ -516,13 +596,11 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
                   </div>
                 )}
 
-                {feedback !== 'incorrect' && (
-                  <div className="text-center mt-6">
-                    <Button onClick={finishTraining} variant="destructive" size="lg">
-                      Завершить
-                    </Button>
-                  </div>
-                )}
+                <div className="text-center mt-6">
+                  <Button onClick={finishTraining} variant="destructive" size="lg">
+                    Завершить
+                  </Button>
+                </div>
               </div>
             ) : (
               // BORDER REPEAT TRAINING

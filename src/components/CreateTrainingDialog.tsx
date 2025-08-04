@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useRangeContext } from "@/contexts/RangeContext";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface CreateTrainingDialogProps {
   open: boolean;
@@ -17,6 +18,7 @@ interface CreateTrainingDialogProps {
 }
 
 export const CreateTrainingDialog = ({ open, onOpenChange, onCreateTraining }: CreateTrainingDialogProps) => {
+  const isMobile = useIsMobile();
   const [name, setName] = useState("");
   const [trainingType, setTrainingType] = useState<"classic" | "border-repeat">("classic");
   const [classicSubtype, setClassicSubtype] = useState<"all-hands" | "border-check">("all-hands");
@@ -68,17 +70,18 @@ export const CreateTrainingDialog = ({ open, onOpenChange, onCreateTraining }: C
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent 
-        mobileFullscreen={true}
-        className="flex flex-col"
+        mobileFullscreen={isMobile}
+        className={cn(
+          "flex flex-col",
+          !isMobile && "max-h-[90vh]"
+        )}
       >
         <DialogHeader className="relative -top-2 flex-shrink-0">
           <DialogTitle>Создать тренировку</DialogTitle>
         </DialogHeader>
 
-        {/* Main content wrapper */}
         <div className="flex-1 flex flex-col min-h-0">
           
-          {/* Name Input */}
           <div className="space-y-2 mt-1 flex-shrink-0">
             <Input
               id="training-name"
@@ -89,21 +92,24 @@ export const CreateTrainingDialog = ({ open, onOpenChange, onCreateTraining }: C
             />
           </div>
 
-          {/* Scrollable wrapper */}
-          <div className="flex-1 flex flex-col space-y-4 min-h-0 overflow-y-auto py-2">
+          <div className="flex-1 flex flex-col min-h-0 overflow-y-auto py-2 pr-2">
+            <Label className="block w-full text-center flex-shrink-0 mb-3">Вид тренировки</Label>
             
-            {/* Вид тренировки */}
-            <div className="space-y-3">
-              <Label className="block w-full text-center">Вид тренировки</Label>
-              <RadioGroup value={trainingType} onValueChange={(value: any) => setTrainingType(value)}>
-                <div className="flex flex-wrap gap-x-6 gap-y-3 space-y-0">
-                  <div className="flex items-center space-x-2 order-1">
+            <RadioGroup 
+              value={trainingType} 
+              onValueChange={(value: any) => setTrainingType(value)} 
+              className="grid grid-cols-2 gap-x-6"
+            >
+              {/* Left Column */}
+              <div className="flex flex-col space-y-4">
+                {/* Classic Option Block */}
+                <div>
+                  <div className="flex items-center space-x-2">
                     <RadioGroupItem value="classic" id="classic" />
-                    <Label htmlFor="classic" className="font-medium">Классическая</Label>
+                    <Label htmlFor="classic" className="font-medium cursor-pointer">Классическая</Label>
                   </div>
-                  
                   {trainingType === "classic" && (
-                    <div className="order-3 w-full ml-0 pt-0 space-y-3">
+                    <div className="space-y-3 pl-8 pt-3">
                       <RadioGroup value={classicSubtype} onValueChange={(value: any) => setClassicSubtype(value)}>
                         <div className="flex items-center space-x-2">
                           <RadioGroupItem value="all-hands" id="all-hands" />
@@ -143,19 +149,24 @@ export const CreateTrainingDialog = ({ open, onOpenChange, onCreateTraining }: C
                       </RadioGroup>
                     </div>
                   )}
+                </div>
+              </div>
 
-                  <div className="flex items-center space-x-2 order-2">
+              {/* Right Column */}
+              <div className="flex flex-col space-y-4">
+                {/* Border Repeat Option Block */}
+                <div>
+                  <div className="flex items-center space-x-2">
                     <RadioGroupItem value="border-repeat" id="border-repeat" />
-                    <Label htmlFor="border-repeat" className="font-medium">Повторение границ</Label>
+                    <Label htmlFor="border-repeat" className="font-medium cursor-pointer">Повторение границ</Label>
                   </div>
-
                   {trainingType === 'border-repeat' && (
-                    <div className="order-4 w-full ml-0 pt-2 space-y-3 pl-6">
+                    <div className="pl-8 pt-3">
                       <Label className="text-xs font-normal text-muted-foreground">Порядок ренжей</Label>
                       <RadioGroup 
                         value={rangeSelectionOrder} 
                         onValueChange={(value: any) => setRangeSelectionOrder(value)}
-                        className="flex items-center gap-x-4 pt-2"
+                        className="flex flex-col gap-y-3 pt-2"
                       >
                         <div className="flex items-center space-x-2">
                           <RadioGroupItem value="sequential" id="sequential" />
@@ -169,11 +180,11 @@ export const CreateTrainingDialog = ({ open, onOpenChange, onCreateTraining }: C
                     </div>
                   )}
                 </div>
-              </RadioGroup>
-            </div>
+              </div>
+            </RadioGroup>
 
-            {/* Выбор ренжей */}
-            <div className="space-y-3 flex-1 flex flex-col min-h-0">
+            {/* Full-width Range Selection */}
+            <div className="space-y-3 pt-4 flex-1 flex flex-col min-h-0">
               <Label>Выберите ренжи для тренировки</Label>
               {!hasRanges ? (
                 <Card className="p-4 text-center">
@@ -184,7 +195,7 @@ export const CreateTrainingDialog = ({ open, onOpenChange, onCreateTraining }: C
               ) : (
                 <Accordion 
                   type="multiple" 
-                  className="w-full pr-2 flex-1 overflow-y-auto"
+                  className="w-full flex-1 overflow-y-auto -mr-2 pr-2"
                 >
                   {folders.map((folder) =>
                     folder.ranges.length > 0 ? (
@@ -216,7 +227,6 @@ export const CreateTrainingDialog = ({ open, onOpenChange, onCreateTraining }: C
             </div>
           </div>
 
-          {/* Кнопки */}
           <div className="flex justify-end gap-3 pt-4 mt-auto flex-shrink-0">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Отмена
