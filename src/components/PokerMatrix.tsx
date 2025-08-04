@@ -32,6 +32,7 @@ export const PokerMatrix = ({ selectedHands, onHandSelect, activeAction, actionB
   const [isDragging, setIsDragging] = useState(false);
   const [dragMode, setDragMode] = useState<'select' | 'deselect' | null>(null);
   const lastHandSelectedDuringDrag = useRef<string | null>(null);
+  const touchStarted = useRef(false);
 
   // If in background mode, disable dragging and force readOnly
   useEffect(() => {
@@ -47,14 +48,19 @@ export const PokerMatrix = ({ selectedHands, onHandSelect, activeAction, actionB
   };
 
   useEffect(() => {
-    window.addEventListener('mouseup', handleDragEnd);
-    window.addEventListener('touchend', handleDragEnd);
-    window.addEventListener('touchcancel', handleDragEnd);
+    const enhancedDragEnd = () => {
+      handleDragEnd();
+      touchStarted.current = false;
+    };
+
+    window.addEventListener('mouseup', enhancedDragEnd);
+    window.addEventListener('touchend', enhancedDragEnd);
+    window.addEventListener('touchcancel', enhancedDragEnd);
 
     return () => {
-      window.removeEventListener('mouseup', handleDragEnd);
-      window.removeEventListener('touchend', handleDragEnd);
-      window.removeEventListener('touchcancel', handleDragEnd);
+      window.removeEventListener('mouseup', enhancedDragEnd);
+      window.removeEventListener('touchend', enhancedDragEnd);
+      window.removeEventListener('touchcancel', enhancedDragEnd);
     };
   }, []);
 
@@ -71,6 +77,18 @@ export const PokerMatrix = ({ selectedHands, onHandSelect, activeAction, actionB
     // Apply action immediately on pointer down to select the first cell
     onHandSelect(hand, mode);
     lastHandSelectedDuringDrag.current = hand;
+  };
+
+  const handleTouchStart = (hand: string) => {
+    touchStarted.current = true;
+    handlePointerDown(hand);
+  };
+
+  const handleMouseDown = (hand: string) => {
+    if (touchStarted.current) {
+      return;
+    }
+    handlePointerDown(hand);
   };
 
   const handlePointerEnter = (hand: string) => {
@@ -173,9 +191,9 @@ export const PokerMatrix = ({ selectedHands, onHandSelect, activeAction, actionB
               getHandColorClass(hand)
             )}
             style={getHandStyle(hand)}
-            onMouseDown={() => handlePointerDown(hand)}
+            onMouseDown={() => handleMouseDown(hand)}
             onMouseEnter={() => handlePointerEnter(hand)}
-            onTouchStart={() => handlePointerDown(hand)}
+            onTouchStart={() => handleTouchStart(hand)}
             // The disabled attribute is removed to prevent dimming
           >
             {hand}

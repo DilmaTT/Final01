@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Play, Trash2, BarChart2 } from "lucide-react";
 import { CreateTrainingDialog } from "./CreateTrainingDialog";
@@ -14,6 +14,16 @@ import {
 } from "@/components/ui/table";
 import { TrainingSession } from "./TrainingSession";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogDesc } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 
 interface TrainingProps {
@@ -56,6 +66,7 @@ export const Training = ({ isMobileMode = false }: TrainingProps) => {
   const [statsVersion, setStatsVersion] = useState(0);
   const [statsModalTrainingId, setStatsModalTrainingId] = useState<string | null>(null);
   const [modalStats, setModalStats] = useState<SessionStat[]>([]);
+  const [deleteCandidateId, setDeleteCandidateId] = useState<string | null>(null);
   const statsModalTraining = trainings.find(t => t.id === statsModalTrainingId);
 
   // Save trainings to localStorage when they change
@@ -116,14 +127,22 @@ export const Training = ({ isMobileMode = false }: TrainingProps) => {
   };
 
   const getTrainingSubtypeText = (training: any) => {
-    if (!training.subtype) return null;
-    if (training.subtype === 'all-hands') return 'Все руки';
-    if (training.subtype === 'border-check') {
-      // Handle old data that might not have this property
-      if (training.borderExpansionLevel === undefined) {
-        return 'Граница ренжа (+0)';
+    if (training.type === 'classic') {
+      if (!training.subtype) return null;
+      if (training.subtype === 'all-hands') return 'Все руки';
+      if (training.subtype === 'border-check') {
+        // Handle old data that might not have this property
+        if (training.borderExpansionLevel === undefined) {
+          return 'Граница ренжа (+0)';
+        }
+        return `Граница ренжа (+${training.borderExpansionLevel})`;
       }
-      return `Граница ренжа (+${training.borderExpansionLevel})`;
+    } else if (training.type === 'border-repeat') {
+      // Handle old data that might not have this property
+      if (training.rangeSelectionOrder === 'random') {
+        return 'Случайный порядок';
+      }
+      return 'По порядку'; // Default for old data and 'sequential'
     }
     return null;
   };
@@ -142,6 +161,13 @@ export const Training = ({ isMobileMode = false }: TrainingProps) => {
     const remainingStats = allStats.filter((stat: SessionStat) => stat.trainingId !== trainingId);
     localStorage.setItem('training-statistics', JSON.stringify(remainingStats));
     setStatsVersion(v => v + 1); // force refresh
+  };
+
+  const handleConfirmDelete = () => {
+    if (deleteCandidateId) {
+      handleDeleteTraining(deleteCandidateId);
+      setDeleteCandidateId(null);
+    }
   };
 
   const handleStartTraining = (trainingId: string) => {
@@ -307,7 +333,7 @@ export const Training = ({ isMobileMode = false }: TrainingProps) => {
                           className={isMobileMode ? "h-6 px-1" : ""}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDeleteTraining(training.id);
+                            setDeleteCandidateId(training.id);
                           }}
                         >
                           <Trash2 className={cn(isMobileMode ? "h-3.5 w-3.5" : "h-4 w-4")} />
@@ -530,6 +556,26 @@ export const Training = ({ isMobileMode = false }: TrainingProps) => {
           </DialogContent>
         </Dialog>
       )}
+
+      <AlertDialog open={!!deleteCandidateId} onOpenChange={(isOpen) => { if (!isOpen) setDeleteCandidateId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Вы уверены?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Это действие невозможно отменить. Это приведет к необратимому удалению тренировки и всей связанной с ней статистики.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmDelete}
+              className={buttonVariants({ variant: "destructive" })}
+            >
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };

@@ -21,6 +21,7 @@ export const CreateTrainingDialog = ({ open, onOpenChange, onCreateTraining }: C
   const [trainingType, setTrainingType] = useState<"classic" | "border-repeat">("classic");
   const [classicSubtype, setClassicSubtype] = useState<"all-hands" | "border-check">("all-hands");
   const [borderExpansionLevel, setBorderExpansionLevel] = useState<0 | 1 | 2>(0);
+  const [rangeSelectionOrder, setRangeSelectionOrder] = useState<'sequential' | 'random'>('sequential');
   const [selectedRanges, setSelectedRanges] = useState<string[]>([]);
   
   const { folders } = useRangeContext();
@@ -46,6 +47,7 @@ export const CreateTrainingDialog = ({ open, onOpenChange, onCreateTraining }: C
       borderExpansionLevel: trainingType === 'classic' && classicSubtype === 'border-check' 
         ? borderExpansionLevel 
         : undefined,
+      rangeSelectionOrder: trainingType === 'border-repeat' ? rangeSelectionOrder : undefined,
       ranges: selectedRanges,
       createdAt: new Date(),
       stats: null
@@ -58,6 +60,7 @@ export const CreateTrainingDialog = ({ open, onOpenChange, onCreateTraining }: C
     setTrainingType("classic");
     setClassicSubtype("all-hands");
     setBorderExpansionLevel(0);
+    setRangeSelectionOrder('sequential');
     setSelectedRanges([]);
     onOpenChange(false);
   };
@@ -145,6 +148,26 @@ export const CreateTrainingDialog = ({ open, onOpenChange, onCreateTraining }: C
                     <RadioGroupItem value="border-repeat" id="border-repeat" />
                     <Label htmlFor="border-repeat" className="font-medium">Повторение границ</Label>
                   </div>
+
+                  {trainingType === 'border-repeat' && (
+                    <div className="order-4 w-full ml-0 pt-2 space-y-3 pl-6">
+                      <Label className="text-xs font-normal text-muted-foreground">Порядок ренжей</Label>
+                      <RadioGroup 
+                        value={rangeSelectionOrder} 
+                        onValueChange={(value: any) => setRangeSelectionOrder(value)}
+                        className="flex items-center gap-x-4 pt-2"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="sequential" id="sequential" />
+                          <Label htmlFor="sequential" className="font-normal cursor-pointer">По порядку</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="random" id="random" />
+                          <Label htmlFor="random" className="font-normal cursor-pointer">Случайно</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                  )}
                 </div>
               </RadioGroup>
             </div>

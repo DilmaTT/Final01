@@ -57,6 +57,7 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
   const [currentHand, setCurrentHand] = useState<string>('');
   const [handsForTraining, setHandsForTraining] = useState<string[]>([]);
   const [currentRangeIndex, setCurrentRangeIndex] = useState(0);
+  const [classicModeCurrentRange, setClassicModeCurrentRange] = useState<any>(null);
   const [sessionStats, setSessionStats] = useState({
     startTime: Date.now(),
     hands: [] as Array<{hand: string, correct: boolean, userAction?: string, correctAction?: string}>,
@@ -82,10 +83,22 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
         }
       }
     }
-    return ranges;
-  }, [folders, training.ranges]);
 
+    if (training.type === 'border-repeat' && training.rangeSelectionOrder === 'random') {
+        // Fisher-Yates (aka Knuth) Shuffle
+        for (let i = ranges.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [ranges[i], ranges[j]] = [ranges[j], ranges[i]];
+        }
+    }
+
+    return ranges;
+  }, [folders, training.ranges, training.type, training.rangeSelectionOrder]);
+
+  // For border-repeat mode, we iterate through ranges
   const currentRange = trainingRanges[currentRangeIndex];
+  // For classic mode, we use a random range, for border-repeat, we use the current one in the sequence
+  const activeRange = training.type === 'classic' ? classicModeCurrentRange : currentRange;
   
   const getSelectedCombinationsCount = () => {
     if (!userMatrix) return 0;
@@ -110,13 +123,19 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
   };
 
   useEffect(() => {
-    if (!currentRange) return;
+    if (trainingRanges.length === 0) return;
 
     if (training.type === 'classic') {
+      // Pick a random range for the first hand
+      const randomRangeIndex = Math.floor(Math.random() * trainingRanges.length);
+      const initialRange = trainingRanges[randomRangeIndex];
+      setClassicModeCurrentRange(initialRange);
+
       if (training.subtype === 'all-hands') {
         generateNewClassicHand();
       } else if (training.subtype === 'border-check') {
-        const handPool = generateBorderHands(currentRange.hands, training.borderExpansionLevel);
+        if (!initialRange) return;
+        const handPool = generateBorderHands(initialRange.hands, training.borderExpansionLevel);
         setHandsForTraining(handPool);
         if (handPool.length > 0) {
           const randomIndex = Math.floor(Math.random() * handPool.length);
@@ -131,23 +150,21 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
         }
       }
     }
-  }, [training.type, training.subtype, training.borderExpansionLevel, currentRange]);
+  }, [training.type, training.subtype, training.borderExpansionLevel, trainingRanges]);
 
   const getCorrectAction = (hand: string) => {
-    if (!currentRange || !hand) return 'fold';
-    return currentRange.hands[hand] || 'fold';
+    if (!activeRange || !hand) return 'fold';
+    return activeRange.hands[hand] || 'fold';
   };
 
   const filteredActionButtons = actionButtons.filter(button => {
-    if (!currentRange || !currentRange.hands) return false;
+    if (!activeRange || !activeRange.hands) return false;
 
-    const usedActions = new Set(Object.values(currentRange.hands));
+    const usedActions = new Set(Object.values(activeRange.hands));
     
     if (button.type === 'simple') {
       return usedActions.has(button.id);
     } else if (button.type === 'weighted') {
-      // For weighted buttons, show them only if BOTH of their constituent simple actions
-      // are present in the current range's assigned hands.
       return usedActions.has(button.action1Id) && usedActions.has(button.action2Id);
     }
     return false;
@@ -240,13 +257,28 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
 
   const proceedToNext = () => {
     if (training.type === 'classic') {
+      const randomRangeIndex = Math.floor(Math.random() * trainingRanges.length);
+      const nextRange = trainingRanges[randomRangeIndex];
+      setClassicModeCurrentRange(nextRange);
+
       if (training.subtype === 'all-hands') {
         generateNewClassicHand();
       } else if (training.subtype === 'border-check') {
-        if (handsForTraining.length > 0) {
-          const nextHandIndex = Math.floor(Math.random() * handsForTraining.length);
-          setCurrentHand(handsForTraining[nextHandIndex]);
+        if (!nextRange) {
+          finishTraining();
+          return;
+        }
+        const handPool = generateBorderHands(nextRange.hands, training.borderExpansionLevel);
+        setHandsForTraining(handPool);
+        if (handPool.length > 0) {
+          const nextHandIndex = Math.floor(Math.random() * handPool.length);
+          setCurrentHand(handPool[nextHandIndex]);
         } else {
+          toast({
+            title: "Тренировка завершена",
+            description: "Не удалось найти подходящие руки в одном из ренжей.",
+            variant: "info",
+          });
           finishTraining();
           return;
         }
@@ -315,7 +347,7 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  if (!currentRange) {
+  if (trainingRanges.length === 0) {
     return (
       <div className="h-full bg-background flex items-center justify-center">
         <Card className="p-6 text-center">
@@ -374,7 +406,7 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
         <div className="sm:hidden px-4 py-2 border-b bg-card">
           <div className="flex items-center justify-between">
             <div className="text-lg font-semibold">
-              {currentRange.folderName} - {currentRange.name}
+              {activeRange?.folderName} - {activeRange?.name}
             </div>
           </div>
         </div>
@@ -385,7 +417,7 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
               <div className="space-y-6">
                 <div className="hidden sm:block text-center">
                   <h1 className="text-2xl font-bold mb-2">
-                    {currentRange.folderName} - {currentRange.name}
+                    {activeRange?.folderName} - {activeRange?.name}
                   </h1>
                   <p className="text-muted-foreground">
                     Текущая рука: {currentHand}
@@ -469,12 +501,12 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
                   </div>
                 )}
 
-                {showCorrectRange && (
+                {showCorrectRange && activeRange && (
                   <div className="space-y-4">
                     <h3 className="text-center text-lg font-semibold">Правильный ренж:</h3>
                     <div className="overflow-x-auto">
                       <PokerMatrix
-                        selectedHands={currentRange.hands}
+                        selectedHands={activeRange.hands}
                         onHandSelect={() => {}}
                         activeAction=""
                         actionButtons={actionButtons}
@@ -556,10 +588,10 @@ export const TrainingSession = ({ training, onStop }: TrainingSessionProps) => {
                       <div className="flex justify-between items-end">
                         <div className="text-left">
                           <h2 className="text-base font-bold text-muted-foreground mb-px">
-                            {currentRange.folderName}
+                            {currentRange?.folderName}
                           </h2>
                           <h1 className="text-sm font-normal ml-1">
-                            {currentRange.name}
+                            {currentRange?.name}
                           </h1>
                         </div>
                         <div className="bg-background/80 px-2 py-1 rounded text-xs font-mono flex items-center gap-1 z-10">
